@@ -5,6 +5,7 @@ import json
 
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.messages import HumanMessage
 from pydantic import BaseModel, Field
@@ -32,8 +33,9 @@ system_prompt = """
     1. Speak like a passionate chef.
     2. NEVER skip steps. You must ask questions to narrow down the meal choice.
     3. Understand what food is available.
-    4. Once the user makes a final decision on a meal, you MUST output the final recipe using the exact structured JSON format requested.
+    4. CRITICAL: When the user makes a final decision on the meal and you are ready to give the recipe, you MUST start your response with the exact keyword: [FINAL_RECIPE]
 """
+    # 4. Once the user makes a final decision on a meal, you MUST output the final recipe using the exact structured JSON format requested.
 
 llm = init_chat_model(
     "gpt-4o-mini",
@@ -44,13 +46,18 @@ llm = init_chat_model(
 structured_llm = llm.with_structured_output(ChefResponse)
 memory = InMemorySaver()
 
-chef_agent = create_react_agent(
+# chef_agent = create_react_agent(
+#     llm,
+#     tools=[],
+#     state_modifier=system_prompt,
+#     checkpointer=memory
+# )
+chef_agent = create_agent(
     llm,
-    tools=[],
-    state_modifier=system_prompt,
+    tools=[], # No external tools needed for this specific lab
+    system_prompt=system_prompt,
     checkpointer=memory
 )
-
 
 # 3. Define the View
 @csrf_exempt
@@ -69,6 +76,20 @@ def chat_interface(request):
         }, config=config)
 
         ai_message = response['messages'][-1].content
+
+        if "[FINAL_RECIPE]" in ai_message:
+            # Clean the keyword from the message sent to the user
+            clean_message = ai_message.replace("[FINAL_RECIPE]", "").strip()
+
+            # Pass the entire conversation history to the structured LLM
+            # so it knows exactly what meal was decided and what ingredients exist
+            conversation_history = response['messages']
+            structured_res = structured_llm.invoke(conversation_history)
+
+            return JsonResponse({
+                "reply": clean_message,
+                "recipe_json": structured_res.model_dump()  # Convert Pydantic to dict
+            })
 
         # If the AI implies the meal is decided, we could trigger the structured output here.
         # For now, we return the conversational response to the frontend.

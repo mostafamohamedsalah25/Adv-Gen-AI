@@ -2,9 +2,194 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chef Assistant 👨‍🍳</title>
+    <style>
+        /* CSS for a clean, modern chat interface */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+        }
+        .chat-header {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+        }
+        .chat-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 20px;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .user-msg {
+            background: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+        .chef-msg {
+            background: #e9ecef;
+            color: black;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+            white-space: pre-wrap; /* Preserves line breaks from the AI */
+        }
+        .input-area {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #ddd;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            outline: none;
+            font-size: 1rem;
+        }
+        .input-area button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-left: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s;
+        }
+        .input-area button:hover {
+            background: #218838;
+        }
+    </style>
 </head>
 <body>
 
+    <div class="chat-container">
+        <div class="chat-header">👨‍🍳 AI Chef Assistant</div>
+
+        <div class="chat-box" id="chat-box">
+            <div class="message chef-msg">Bonjour! I am your AI Chef. Tell me what ingredients you have in your kitchen, and let's cook something magnifique!</div>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="e.g., I have chicken, rice, and garlic..." autocomplete="off">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // Generate a random thread ID for this specific browser session to maintain memory
+        const threadId = "session_" + Math.random().toString(36).substring(7);
+
+        async function sendMessage() {
+            const inputField = document.getElementById('user-input');
+            const message = inputField.value.trim();
+
+            if (!message) return; // Don't send empty messages
+
+            // 1. Display User Message
+            addMessageToChat('user', message);
+            inputField.value = ''; // Clear input
+
+            // 2. Add a temporary "Chef is thinking..." message
+            const loadingId = addMessageToChat('chef', 'Hmm... let me think 👨‍🍳⏳');
+
+            try {
+                // 3. Send POST request to our Django View
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        thread_id: threadId // Pass the memory ID
+                    })
+                });
+
+                const data = await response.json();
+
+                // 4. Replace loading message with actual Chef response
+                updateMessageInChat(loadingId, data.reply);
+
+                // 5. If the backend sent structured JSON, display it!
+                if (data.recipe_json) {
+                    // Fixed string concatenation to avoid breaking JS syntax
+                    const formattedJson = JSON.stringify(data.recipe_json, null, 2);
+                    const jsonDisplay = "\n\n```json\n" + formattedJson + "\n```\nBon Appétit!";
+                    addMessageToChat('chef', jsonDisplay);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                updateMessageInChat(loadingId, 'Oops! Something went wrong in the kitchen. Please try again.');
+            }
+        }
+
+        // Helper function to append messages to the DOM
+        function addMessageToChat(sender, text) {
+            const chatBox = document.getElementById('chat-box');
+            const msgDiv = document.createElement('div');
+
+            // Generate a unique ID for the message element
+            const msgId = 'msg_' + Math.random().toString(36).substring(7);
+            msgDiv.id = msgId;
+
+            msgDiv.classList.add('message');
+            msgDiv.classList.add(sender === 'user' ? 'user-msg' : 'chef-msg');
+            msgDiv.innerText = text;
+
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll to bottom
+
+            return msgId;
+        }
+
+        // Helper function to update existing messages
+        function updateMessageInChat(msgId, newText) {
+            const msgDiv = document.getElementById(msgId);
+            if (msgDiv) {
+                msgDiv.innerText = newText;
+            }
+        }
+
+        // Event Listeners for sending messages
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+        document.getElementById('user-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
 </body>
 </html>
