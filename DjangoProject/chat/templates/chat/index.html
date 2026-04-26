@@ -102,6 +102,9 @@
         </div>
 
         <div class="input-area">
+            <input type="file" id="image-upload" accept="image/*" style="display: none;">
+            <label for="image-upload" style="cursor: pointer; padding: 10px; font-size: 1.5rem; margin-right: 10px;" title="Upload photo of ingredients">📷</label>
+
             <input type="text" id="user-input" placeholder="e.g., I have chicken, rice, and garlic..." autocomplete="off">
             <button id="send-btn">Send</button>
         </div>
@@ -111,18 +114,40 @@
         // Generate a random thread ID for this specific browser session to maintain memory
         const threadId = "session_" + Math.random().toString(36).substring(7);
 
+        document.getElementById('image-upload').addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                document.getElementById('user-input').placeholder = "Image attached! Add a message or press send...";
+            }
+        });
+
         async function sendMessage() {
             const inputField = document.getElementById('user-input');
+            const fileInput = document.getElementById('image-upload');
             const message = inputField.value.trim();
+            const file = fileInput.files[0];
 
-            if (!message) return; // Don't send empty messages
+            if (!message && !file) return; // Don't send empty messages
 
-            // 1. Display User Message
-            addMessageToChat('user', message);
+            let base64Image = null;
+
+            // If an image was uploaded, read it as a Base64 string
+            if (file) {
+                base64Image = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(file);
+                });
+                addMessageToChat('user', message ? message + ' [📸 Image attached]' : '[📸 Image sent]');
+            } else {
+                addMessageToChat('user', message);
+            }
+
             inputField.value = ''; // Clear input
+            inputField.placeholder = "e.g., I have chicken, rice, and garlic...";
+            fileInput.value = '';
 
             // 2. Add a temporary "Chef is thinking..." message
-            const loadingId = addMessageToChat('chef', 'Hmm... let me think 👨‍🍳⏳');
+            const loadingId = addMessageToChat('chef', 'Hmm... let me think ');
 
             try {
                 // 3. Send POST request to our Django View
@@ -133,6 +158,7 @@
                     },
                     body: JSON.stringify({
                         message: message,
+                        image: base64Image,
                         thread_id: threadId // Pass the memory ID
                     })
                 });

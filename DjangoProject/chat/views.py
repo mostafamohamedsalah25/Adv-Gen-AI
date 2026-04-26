@@ -46,17 +46,12 @@ llm = init_chat_model(
 structured_llm = llm.with_structured_output(ChefResponse)
 memory = InMemorySaver()
 
-# chef_agent = create_react_agent(
-#     llm,
-#     tools=[],
-#     state_modifier=system_prompt,
-#     checkpointer=memory
-# )
 chef_agent = create_agent(
     llm,
     tools=[], # No external tools needed for this specific lab
     system_prompt=system_prompt,
-    checkpointer=memory
+    checkpointer=memory,
+    # response_format= ChefResponse
 )
 
 # 3. Define the View
@@ -66,13 +61,28 @@ def chat_interface(request):
         # Parse the incoming JSON data from the frontend
         data = json.loads(request.body)
         user_message = data.get('message', '')
+        image_data = data.get('image', None)
         thread_id = data.get('thread_id', 'default_session')
 
         config = {"configurable": {"thread_id": thread_id}}
 
+        # Construct multimodal content
+        message_content = []
+        if user_message:
+            message_content.append({"type": "text", "text": user_message})
+        else:
+            message_content.append({"type": "text", "text": "What meals can I make with these ingredients?"})
+
+        if image_data:
+            # LangChain vision format
+            message_content.append({
+                "type": "image_url",
+                "image_url": {"url": image_data}
+            })
+
         # Invoke the LangGraph agent
         response = chef_agent.invoke({
-            "messages": [HumanMessage(content=user_message)]
+            "messages": [HumanMessage(content=message_content)]
         }, config=config)
 
         ai_message = response['messages'][-1].content
